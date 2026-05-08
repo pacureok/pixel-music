@@ -1,45 +1,53 @@
 import torch
 import soundfile as sf
-from diffusers import AudioLDM2Pipeline
+from diffusers import StableAudioPipeline
+from huggingface_hub import login
 import os
 
 def generate_music():
-    print("--- Iniciando Generador de Música Nivel Suno ---")
+    # 1. Autenticación con tu Token
+    # Nota: En un entorno real, es mejor usar variables de entorno
+    HF_TOKEN = "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"
+    login(token=HF_TOKEN)
+
+    print("--- Cargando Stable Audio Open 1.0 (Stability AI) ---")
     
-    # Usamos AudioLDM2-Music: No es Gated (Sin error 401) y es SOTA
-    model_id = "cvssp/audioldm2-music"
+    model_id = "stabilityai/stable-audio-open-1.0"
     
-    print(f"Cargando modelo en 2 GPUs T4...")
-    
-    # Cargamos con float16 para velocidad y repartimos en las GPUs
-    pipe = AudioLDM2Pipeline.from_pretrained(
+    # Cargamos el pipeline en media precisión (float16) para no agotar la RAM de la T4
+    pipe = StableAudioPipeline.from_pretrained(
         model_id, 
-        torch_dtype=torch.float16,
-        device_map="balanced"
+        torch_dtype=torch.float16
     )
+    pipe = pipe.to("cuda")
 
-    # Prompt tipo Suno
-    prompt = "A high-energy electronic dance track with heavy bass, synth melodies, and a professional club atmosphere, 128 BPM"
-    negative_prompt = "low quality, distortion, noise, monotone, vocals"
+    # Configuramos los prompts
+    prompt = "A professional tech house track, 128 BPM, high energy, punchy kick, melodic synth, club atmosphere"
+    negative_prompt = "Low quality, static, noise, distorted, vocals, mono"
 
-    print(f"Generando audio: '{prompt}'")
+    print(f"Generando audio de alta fidelidad...")
     
-    # Generación
-    # AudioLDM2 genera resultados muy limpios con 50-100 pasos
+    # Generación de audio
+    # audio_end_in_s define la duración (máximo 47s para este modelo)
     with torch.inference_mode():
-        audio = pipe(
+        generator = torch.Generator("cuda").manual_seed(42) # Semilla fija para consistencia
+        output = pipe(
             prompt,
             negative_prompt=negative_prompt,
-            num_inference_steps=100,
-            audio_length_in_s=30, # Duración en segundos
-            num_waveforms_per_prompt=1
-        ).audios[0]
+            num_inference_steps=200,
+            audio_end_in_s=30.0, 
+            num_waveforms_per_prompt=1,
+            generator=generator
+        ).audios
 
-    # Guardar resultado
-    output_path = "resultado_suno_clone.wav"
-    sf.write(output_path, audio, 48000) # AudioLDM2 usa 48kHz
+    # El modelo devuelve un tensor [batch, canales, muestras]
+    # Lo transponemos para que soundfile lo entienda (muestras, canales)
+    audio_data = output[0].T.float().cpu().numpy()
     
-    print(f"--- ¡Éxito! Archivo guardado como: {output_path} ---")
+    output_filename = "stable_audio_output.wav"
+    sf.write(output_filename, audio_data, pipe.vae.sampling_rate)
+    
+    print(f"--- ¡Éxito! Música guardada como: {output_filename} ---")
 
 if __name__ == "__main__":
     generate_music()
