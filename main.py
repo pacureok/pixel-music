@@ -10,38 +10,31 @@ def PIXEL_MU():
     parser.add_argument("prompt", type=str, help="Descripción del audio")
     parser.add_argument("-YT", "--youtube", type=str, default=None, help="URL de YouTube")
     parser.add_argument("-N", "--negative", type=str, default="Low quality", help="Lo que no quieres")
+    parser.add_argument("-T", "--token", type=str, required=True, help="Token de Hugging Face")
     
     args = parser.parse_args()
 
-    # --- REEMPLAZA ESTO CON TU NUEVO TOKEN ---
-    HF_TOKEN = "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" 
-    # -----------------------------------------
-
     try:
-        if HF_TOKEN == "TU_NUEVO_TOKEN_AQUÍ":
-            print("Error: Debes poner tu nuevo token de Hugging Face en el script.")
-            return
+        print("Autenticando con Hugging Face...")
+        login(token=args.token)
 
-        login(token=HF_TOKEN)
-
+        print("\nCargando el cerebro musical en la GPU (esto toma un momento)...")
         model_id = "stabilityai/stable-audio-open-1.0"
-        print(f"\nComponiendo: {args.prompt}")
 
-        # Configuración según documentación oficial de Diffusers
         pipe = StableAudioPipeline.from_pretrained(
             model_id, 
             torch_dtype=torch.float16,
             use_safetensors=True
-        )
-        pipe = pipe.to("cuda")
+        ).to("cuda")
 
+        print(f"\nComponiendo: {args.prompt}")
         generator = torch.Generator("cuda").manual_seed(0)
 
         audio = pipe(
             args.prompt,
             negative_prompt=args.negative,
             num_inference_steps=200,
-            audio_end_in_s=30.0, # Generamos 30 segundos
+            audio_end_in_s=30.0,
             num_waveforms_per_prompt=1,
             generator=generator,
         ).audios
@@ -50,10 +43,11 @@ def PIXEL_MU():
         output = audio[0].T.float().cpu().numpy()
         sf.write(output_file, output, pipe.vae.sampling_rate)
         
-        print(f"¡Éxito! Audio guardado en {output_file}")
+        print(f"\n--- ¡ÉXITO! ---")
+        print(f"Audio guardado como: {output_file}")
 
     except Exception as e:
-        print(f"Hubo un problema: {e}")
+        print(f"\n[ERROR]: {e}")
 
 if __name__ == "__main__":
     PIXEL_MU()
