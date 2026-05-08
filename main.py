@@ -1,53 +1,53 @@
 import torch
 import soundfile as sf
+import argparse
+import os
 from diffusers import StableAudioPipeline
 from huggingface_hub import login
-import os
 
-def generate_music():
-    # 1. Autenticación con tu Token
-    # Nota: En un entorno real, es mejor usar variables de entorno
+def run_pixel_music():
+    # Configuración de argumentos para el comando personalizado
+    parser = argparse.ArgumentParser(description="PIXEL-MU CLI")
+    parser.add_argument("prompt", type=str, help="El prompt principal entre comillas")
+    parser.add_argument("-YT", "--youtube", type=str, help="URL de YouTube de base (Opcional)", default=None)
+    parser.add_argument("-N", "--negative", type=str, help="Lo que no debe hacer", default="Low quality, noise")
+    
+    args = parser.parse_args()
+
+    # Autenticación (Reemplaza con tu token si es necesario)
     HF_TOKEN = "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"
     login(token=HF_TOKEN)
 
-    print("--- Cargando Stable Audio Open 1.0 (Stability AI) ---")
-    
+    # Si hay URL de YouTube, podrías usarla aquí (Stable Audio Open es solo Text-to-Audio)
+    if args.youtube:
+        print(f"--- Nota: Base de YouTube detectada ({args.youtube}). ---")
+        print("El modelo actual solo usa el prompt de texto, pero la URL está lista para futuras expansiones.")
+
+    print("--- Cargando Modelo PIXEL-MU ---")
     model_id = "stabilityai/stable-audio-open-1.0"
     
-    # Cargamos el pipeline en media precisión (float16) para no agotar la RAM de la T4
     pipe = StableAudioPipeline.from_pretrained(
         model_id, 
         torch_dtype=torch.float16
-    )
-    pipe = pipe.to("cuda")
+    ).to("cuda")
 
-    # Configuramos los prompts
-    prompt = "A professional tech house track, 128 BPM, high energy, punchy kick, melodic synth, club atmosphere"
-    negative_prompt = "Low quality, static, noise, distorted, vocals, mono"
+    print(f"Generando: {args.prompt}")
+    print(f"Evitando: {args.negative}")
 
-    print(f"Generando audio de alta fidelidad...")
-    
-    # Generación de audio
-    # audio_end_in_s define la duración (máximo 47s para este modelo)
     with torch.inference_mode():
-        generator = torch.Generator("cuda").manual_seed(42) # Semilla fija para consistencia
+        generator = torch.Generator("cuda").manual_seed(42)
         output = pipe(
-            prompt,
-            negative_prompt=negative_prompt,
+            args.prompt,
+            negative_prompt=args.negative,
             num_inference_steps=200,
-            audio_end_in_s=30.0, 
+            audio_end_in_s=30.0,
             num_waveforms_per_prompt=1,
             generator=generator
         ).audios
 
-    # El modelo devuelve un tensor [batch, canales, muestras]
-    # Lo transponemos para que soundfile lo entienda (muestras, canales)
     audio_data = output[0].T.float().cpu().numpy()
-    
-    output_filename = "stable_audio_output.wav"
-    sf.write(output_filename, audio_data, pipe.vae.sampling_rate)
-    
-    print(f"--- ¡Éxito! Música guardada como: {output_filename} ---")
+    sf.write("pixel_output.wav", audio_data, pipe.vae.sampling_rate)
+    print("--- ¡Éxito! Archivo guardado como pixel_output.wav ---")
 
 if __name__ == "__main__":
-    generate_music()
+    run_pixel_music()
