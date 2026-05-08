@@ -1,8 +1,7 @@
-torch
-torchaudio
 diffusers
 transformers
 accelerate
 einops
-gradio
-huggingface_hub
+torch
+torchaudio
+soundfile
